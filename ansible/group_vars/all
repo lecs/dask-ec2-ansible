@@ -1,0 +1,10 @@
+---
+key_name: <key_name>
+aws_region: "eu-west-1"
+ami_id: "ami-94b236ed"
+master_instance_type: "c4.4xlarge"
+worker_instance_type: "c4.4xlarge"
+security_group: "dask-cluster-security"
+master_name: "dask-master"
+worker_name: "dask-worker"
+worker_count: 2

@@ -1,0 +1,85 @@
+---
+# Basic provisioning example
+- name: Create AWS resources
+  hosts: local
+  connection: local
+  gather_facts: False
+  tags: provisioning
+
+  tasks:
+
+    - name: Create a security group 
+      ec2_group:
+        name: "{{ security_group }}"
+        description: Security Group for notebook server
+        region: "{{ aws_region }}"
+        rules:
+          - proto: tcp
+            from_port: 22
+            to_port: 22
+            cidr_ip: 0.0.0.0/0
+          - proto: tcp
+            from_port: 8888
+            to_port: 8888
+            cidr_ip: 0.0.0.0/0
+          - proto: tcp
+            from_port: 443
+            to_port: 443
+            cidr_ip: 0.0.0.0/0
+        rules_egress:
+          - proto: all
+            cidr_ip: 0.0.0.0/0
+      register: basic_firewall
+
+    - name: Create a master node
+      ec2:
+        group: "{{ security_group }}"
+        key_name: "{{key_name}}"
+        region: "{{aws_region}}"
+        instance_type: "{{master_instance_type}}"
+        image: "{{ami_id}}"
+        wait: yes
+        exact_count: 1
+        count_tag:
+           Name: "{{ master_name }}"
+        instance_tags:
+           Name: "{{ master_name }}"
+      register: ec2_master
+
+    - name: Add the master to the local host group (located inside the directory)
+      lineinfile:
+        dest: "./hosts" 
+        regexp: "{{ item.public_ip }}"
+        insertafter: "^\\[master\\]"
+        line: "{{ item.public_ip }}"
+      with_items: "{{ ec2_master.instances }}"
+
+    - name: Create worker nodes
+      ec2:
+        group: "{{ security_group }}"
+        key_name: "{{key_name}}"
+        region: "{{aws_region}}"
+        instance_type: "{{worker_instance_type}}"
+        image: "{{ami_id}}"
+        wait: yes
+        exact_count: "{{ worker_count }}"
+        count_tag:
+           Name: "{{ worker_name }}"
+        instance_tags:
+           Name: "{{ worker_name }}"
+      register: ec2_worker
+
+    - name: Add the worker(s) to the local host group (located inside the directory)
+      lineinfile:
+        dest: "./hosts" 
+        regexp: "{{ item.public_ip }}"
+        insertafter: "^\\[workers\\]"
+        line: "{{ item.public_ip }}"
+      with_items: "{{ ec2_worker.instances }}"
+
+    - name: Wait for SSH to come up
+      wait_for:
+        host: "{{ item.public_ip }}"
+        port: 22 
+        state: started
+      with_items: "{{ ec2_worker.instances }}"
